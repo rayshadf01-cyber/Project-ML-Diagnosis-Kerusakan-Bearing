@@ -1,14 +1,16 @@
 
-import streamlit as st
-import pandas as pd
-import joblib
 import json
-import os
+from pathlib import Path
 from datetime import datetime
 
-# ==========================================
-# PAGE CONFIG
-# ==========================================
+import joblib
+import pandas as pd
+import streamlit as st
+
+
+# =========================================================
+# 1. KONFIGURASI APLIKASI
+# =========================================================
 
 st.set_page_config(
     page_title="BearingGuard AI | Shinchan Edition",
@@ -17,276 +19,354 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-MODEL_PATH = "models/model.joblib"
-METADATA_PATH = "models/metadata.json"
+BASE_DIR = Path(__file__).resolve().parent
+MODEL_PATH = BASE_DIR / "models" / "model.joblib"
+METADATA_PATH = BASE_DIR / "models" / "metadata.json"
 
-# ==========================================
-# CUSTOM CSS
-# ==========================================
+
+# =========================================================
+# 2. LOAD MODEL DAN METADATA
+# =========================================================
+
+@st.cache_resource
+def load_model():
+    if not MODEL_PATH.exists():
+        raise FileNotFoundError(
+            f"Model tidak ditemukan: {MODEL_PATH}"
+        )
+
+    return joblib.load(MODEL_PATH)
+
+
+@st.cache_data
+def load_metadata():
+    if METADATA_PATH.exists():
+        with open(METADATA_PATH, "r", encoding="utf-8") as file:
+            return json.load(file)
+
+    return {}
+
+
+try:
+    model = load_model()
+    metadata = load_metadata()
+    MODEL_READY = True
+
+except Exception as error:
+    model = None
+    metadata = {}
+    MODEL_READY = False
+    MODEL_ERROR = str(error)
+
+
+# =========================================================
+# 3. KONFIGURASI FITUR
+# =========================================================
+
+DEFAULT_FEATURES = [
+    "posisi_sensor",
+    "kecepatan_rpm",
+    "beban_kN",
+    "suhu_housing_C",
+    "rms_g",
+    "puncak_g",
+    "kurtosis",
+    "crest_factor",
+    "energi_bpfo",
+    "energi_bpfi",
+    "energi_bsf",
+    "frekuensi_dominan_hz"
+]
+
+FEATURE_COLUMNS = metadata.get(
+    "features",
+    DEFAULT_FEATURES
+)
+
+# Sesuaikan dengan encoding posisi_sensor saat training.
+# Default ini mengikuti mapping yang digunakan sebelumnya.
+SENSOR_MAPPING = metadata.get(
+    "sensor_mapping",
+    {
+        "drive_end": 0,
+        "fan_end": 1
+    }
+)
+
+CLASS_INFO = {
+    "normal": {
+        "emoji": "🟢",
+        "title": "NORMAL",
+        "description": "Bearing berada dalam kondisi normal.",
+        "recommendation": (
+            "Pertahankan jadwal perawatan berkala. "
+            "Lakukan pemantauan getaran dan suhu secara rutin."
+        )
+    },
+    "outer_race": {
+        "emoji": "🟠",
+        "title": "OUTER RACE FAULT",
+        "description": "Terindikasi kerusakan pada lintasan luar bearing.",
+        "recommendation": (
+            "Periksa lintasan luar bearing. "
+            "Jadwalkan inspeksi dan pertimbangkan penggantian "
+            "bearing jika kerusakan terkonfirmasi."
+        )
+    },
+    "inner_race": {
+        "emoji": "🔴",
+        "title": "INNER RACE FAULT",
+        "description": "Terindikasi kerusakan pada lintasan dalam bearing.",
+        "recommendation": (
+            "Periksa lintasan dalam, kondisi pelumasan, "
+            "dan kemungkinan keausan. Lakukan inspeksi lebih lanjut."
+        )
+    },
+    "bola": {
+        "emoji": "🟡",
+        "title": "BALL FAULT",
+        "description": "Terindikasi kerusakan pada elemen bola bearing.",
+        "recommendation": (
+            "Periksa elemen bola dan kondisi lintasan bearing. "
+            "Lakukan pemeriksaan lanjutan sebelum mesin dioperasikan "
+            "kembali secara normal."
+        )
+    }
+}
+
+
+# =========================================================
+# 4. CSS - SHINCHAN THEME
+# =========================================================
 
 st.markdown("""
 <style>
 
-:root {
-    --navy: #26365D;
-    --navy2: #354A78;
-    --cream: #FFF8EB;
-    --yellow: #FFD43B;
-    --red: #D9233F;
-    --ink: #26365D;
-    --muted: #64748B;
-    --line: #E8D8BD;
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&display=swap');
+
+html, body, [class*="css"] {
+    font-family: 'Nunito', sans-serif;
 }
 
 .stApp {
-    background: var(--cream);
-    color: var(--ink);
+    background-color: #FFF8EC;
+    color: #24385F;
 }
 
-[data-testid="stHeader"] {
-    background: transparent;
+header[data-testid="stHeader"] {
+    background-color: #FFF8EC;
 }
 
 .block-container {
-    max-width: 1500px;
-    padding-top: 1.5rem;
+    max-width: 1250px;
+    padding-top: 2rem;
     padding-bottom: 3rem;
 }
 
-h1, h2, h3, h4, p, label {
-    color: var(--ink);
+/* Sidebar */
+
+section[data-testid="stSidebar"] {
+    background-color: #263B68;
 }
 
-h1, h2, h3 {
-    font-weight: 850 !important;
+section[data-testid="stSidebar"] * {
+    color: #FFFFFF;
 }
 
-[data-testid="stSidebar"] {
-    background: var(--navy);
-    border-right: 4px solid var(--yellow);
+.sidebar-logo {
+    text-align: center;
+    padding: 15px 5px 20px 5px;
 }
 
-[data-testid="stSidebar"] * {
-    color: white !important;
+.sidebar-logo h2 {
+    color: #FFD447;
+    font-size: 23px;
+    font-weight: 900;
+    margin-bottom: 0;
 }
 
-[data-testid="stSidebar"] [data-testid="stRadio"] label {
-    background: var(--navy2);
-    border: 1px solid #ffffff20;
-    border-radius: 12px;
-    padding: 9px 12px;
-    margin: 5px 0;
+.sidebar-logo p {
+    color: #FFFFFF;
+    font-size: 10px;
+    letter-spacing: 1px;
 }
+
+/* Heading */
+
+.main-title {
+    color: #263B68;
+    font-size: 34px;
+    font-weight: 900;
+    margin-bottom: 5px;
+}
+
+.subtitle {
+    color: #71809B;
+    font-size: 14px;
+    margin-bottom: 25px;
+}
+
+/* Hero */
 
 .hero {
-    background: linear-gradient(120deg, #26365D, #405A91);
-    border: 3px solid var(--yellow);
-    border-radius: 22px;
-    padding: 25px 28px;
-    margin-bottom: 22px;
-    box-shadow: 0 8px 22px #26365d20;
-}
-
-.hero .eyebrow {
-    color: var(--yellow);
-    font-size: 11px;
-    font-weight: 900;
-    letter-spacing: 2px;
+    background: linear-gradient(120deg, #263B68, #405B91);
+    padding: 32px;
+    border-radius: 18px;
+    border: 2px solid #FFD447;
+    margin-bottom: 25px;
+    box-shadow: 0 5px 15px rgba(38, 59, 104, 0.12);
 }
 
 .hero h1 {
-    color: white !important;
-    font-size: clamp(26px, 3vw, 38px);
-    margin: 7px 0;
+    color: #FFFFFF !important;
+    font-size: 32px;
+    font-weight: 900;
+    margin-bottom: 8px;
 }
 
 .hero p {
-    color: white !important;
+    color: #F7F2E8 !important;
+    font-size: 15px;
+    margin-bottom: 0;
 }
 
-.section-heading {
-    color: var(--navy);
-    font-size: clamp(20px, 2vw, 26px);
-    font-weight: 900;
-    margin: 8px 0 14px;
-}
+/* Cards */
 
-.panel, .metric-card, .result-card, .class-card {
-    background: white;
-    border: 2px solid var(--line);
-    border-radius: 18px;
-    padding: 18px;
-    box-shadow: 0 5px 16px #26365d10;
+div[data-testid="stVerticalBlockBorderWrapper"] {
+    background-color: #FFFFFF;
+    border-radius: 14px;
+    border-color: #E9DCC7;
 }
 
 .metric-card {
-    text-align: center;
-    min-height: 112px;
-    border-color: #DCE4F2;
+    background-color: #FFFFFF;
+    border: 1px solid #E9DCC7;
+    border-radius: 14px;
+    padding: 20px;
+    min-height: 120px;
+    box-shadow: 0 3px 10px rgba(38, 59, 104, 0.05);
 }
 
 .metric-label {
-    color: #526487;
+    color: #7A879E;
     font-size: 12px;
     font-weight: 800;
-    letter-spacing: .5px;
+    text-transform: uppercase;
 }
 
 .metric-value {
-    color: var(--navy);
-    font-size: clamp(20px, 2.4vw, 28px);
-    font-weight: 950;
-    margin-top: 5px;
-}
-
-.class-card {
-    text-align: center;
-    min-height: 145px;
-}
-
-.class-emoji {
-    font-size: 34px;
-}
-
-.class-name {
+    color: #263B68;
+    font-size: 25px;
     font-weight: 900;
-    color: var(--navy);
-    margin: 5px 0;
-}
-
-.class-desc {
-    color: #526487;
-    font-size: 13px;
-}
-
-.result-card {
-    border: 3px solid var(--yellow);
-    text-align: center;
-    padding: 30px 18px;
-    min-height: 270px;
-}
-
-.result-emoji {
-    font-size: 64px;
-    line-height: 1.2;
-}
-
-.result-kicker {
-    color: #526487;
-    font-size: 12px;
-    font-weight: 900;
-    letter-spacing: .7px;
     margin-top: 10px;
 }
 
+.metric-caption {
+    color: #929BAD;
+    font-size: 11px;
+    margin-top: 4px;
+}
+
+/* Result */
+
+.result-card {
+    background: #FFFFFF;
+    border: 2px solid #FFD447;
+    border-radius: 18px;
+    padding: 25px;
+    text-align: center;
+}
+
+.result-label {
+    color: #7A879E;
+    font-size: 13px;
+    font-weight: 800;
+}
+
 .result-name {
-    font-size: clamp(28px, 3vw, 40px);
-    font-weight: 950;
+    color: #263B68;
+    font-size: 27px;
+    font-weight: 900;
     margin: 12px 0;
 }
 
+.result-description {
+    color: #65738C;
+    font-size: 14px;
+}
+
+/* Recommendation */
+
 .recommendation {
-    background: #EAF1FF;
-    border-left: 6px solid #405A91;
-    border-radius: 13px;
-    padding: 18px;
-    color: #26365D;
-    line-height: 1.7;
-    font-size: 16px;
-}
-
-.warning-box {
-    background: #FFF1C2;
-    border-left: 6px solid #E7AD18;
-    border-radius: 13px;
-    padding: 16px;
-    color: #59430B;
-    line-height: 1.6;
-    margin-top: 12px;
-}
-
-.mascot-card {
-    background: #354A78;
-    border: 1px solid #6379A5;
-    border-radius: 16px;
-    padding: 14px;
-    margin-top: 12px;
-}
-
-.mascot {
-    font-size: 40px;
-    text-align: center;
-    margin: 2px 0 6px;
-}
-
-.mascot-caption {
-    color: white;
-    text-align: center;
-    font-size: 12px;
-}
-
-.stButton > button,
-.stFormSubmitButton > button {
-    background: var(--red) !important;
-    color: white !important;
-    border: 0 !important;
-    border-radius: 12px !important;
-    font-weight: 900 !important;
-    min-height: 48px;
-}
-
-.stButton > button:hover,
-.stFormSubmitButton > button:hover {
-    background: #B81732 !important;
-    transform: translateY(-1px);
-}
-
-.stNumberInput label,
-.stSelectbox label {
-    color: var(--navy) !important;
-    font-weight: 800 !important;
-}
-
-.stNumberInput input {
-    background: white !important;
-    color: #26365D !important;
-    border: 1px solid #AAB9D1 !important;
-    border-radius: 10px !important;
-}
-
-.stSelectbox div[data-baseweb="select"] {
-    background: white !important;
+    background: #FFF0BF;
+    border-left: 5px solid #FFD447;
     border-radius: 10px;
+    padding: 18px;
+    color: #263B68;
+    margin-top: 15px;
 }
 
-[data-testid="stDataFrame"] {
-    border: 1px solid #DCE4F2;
-    border-radius: 12px;
+/* Buttons */
+
+.stButton > button {
+    background-color: #E72D46;
+    color: #FFFFFF;
+    border: none;
+    border-radius: 10px;
+    font-weight: 800;
+    min-height: 42px;
 }
 
-div[data-testid="stExpander"] {
-    background: white;
-    border: 1px solid var(--line);
-    border-radius: 12px;
+.stButton > button:hover {
+    background-color: #C91F38;
+    color: #FFFFFF;
+    border: none;
+}
+
+/* Inputs */
+
+.stTextInput input,
+.stNumberInput input,
+.stSelectbox div[data-baseweb="select"] {
+    border-radius: 8px;
+}
+
+h1, h2, h3 {
+    color: #263B68;
+    font-weight: 900;
 }
 
 hr {
-    border-color: #D8C9B2 !important;
+    border-color: #E9DCC7;
 }
 
-/* RESPONSIVE */
+.footer {
+    text-align: center;
+    color: #8A94A8;
+    font-size: 12px;
+    padding: 25px 5px;
+}
 
-@media(max-width: 900px) {
-    .block-container {
-        padding: 1rem .8rem 2rem;
+.small-note {
+    color: #7A879E;
+    font-size: 12px;
+}
+
+@media (max-width: 768px) {
+    .main-title {
+        font-size: 25px;
     }
 
     .hero {
-        padding: 18px;
+        padding: 22px;
     }
 
-    .panel, .metric-card, .result-card {
-        padding: 14px;
+    .hero h1 {
+        font-size: 25px;
+    }
+
+    .metric-value {
+        font-size: 21px;
     }
 }
 
@@ -294,118 +374,9 @@ hr {
 """, unsafe_allow_html=True)
 
 
-# ==========================================
-# LOAD MODEL
-# ==========================================
-
-@st.cache_resource
-def load_model():
-
-    if not os.path.exists(MODEL_PATH):
-        raise FileNotFoundError(
-            f"File {MODEL_PATH} tidak ditemukan."
-        )
-
-    if not os.path.exists(METADATA_PATH):
-        raise FileNotFoundError(
-            f"File {METADATA_PATH} tidak ditemukan."
-        )
-
-    model = joblib.load(MODEL_PATH)
-
-    with open(
-        METADATA_PATH,
-        "r",
-        encoding="utf-8"
-    ) as file:
-        metadata = json.load(file)
-
-    return model, metadata
-
-
-try:
-    model, metadata = load_model()
-
-except Exception as exc:
-
-    st.error(
-        f"Gagal memuat model atau metadata: {exc}"
-    )
-
-    st.info(
-        "Pastikan model.joblib dan metadata.json "
-        "berada di folder models/."
-    )
-
-    st.stop()
-
-
-FEATURE_COLUMNS = metadata.get("features", [])
-
-if not FEATURE_COLUMNS:
-    st.error(
-        "Daftar fitur tidak ditemukan pada metadata.json."
-    )
-    st.stop()
-
-
-# ==========================================
-# CONFIGURATION
-# ==========================================
-
-# Pastikan mapping sama dengan proses training.
-SENSOR_MAPPING = {
-    "drive_end": 0,
-    "fan_end": 1
-}
-
-CLASS_INFO = {
-
-    "normal": {
-        "emoji": "💚",
-        "color": "#16834A",
-        "title": "NORMAL",
-        "recommendation":
-            "Bearing terdeteksi dalam kondisi normal. "
-            "Lanjutkan pemantauan getaran dan "
-            "perawatan berkala."
-    },
-
-    "outer_race": {
-        "emoji": "🔴",
-        "color": "#D9233F",
-        "title": "OUTER RACE",
-        "recommendation":
-            "Terindikasi kerusakan pada outer race. "
-            "Lakukan inspeksi dan pertimbangkan "
-            "penggantian bearing."
-    },
-
-    "inner_race": {
-        "emoji": "🟠",
-        "color": "#D97706",
-        "title": "INNER RACE",
-        "recommendation":
-            "Terindikasi kerusakan pada inner race. "
-            "Jadwalkan pemeriksaan dan siapkan "
-            "komponen pengganti."
-    },
-
-    "bola": {
-        "emoji": "🟣",
-        "color": "#7851A9",
-        "title": "BALL FAULT",
-        "recommendation":
-            "Terindikasi kerusakan elemen bola. "
-            "Periksa kondisi bearing dan siapkan "
-            "komponen pengganti."
-    }
-}
-
-
-# ==========================================
-# SESSION STATE
-# ==========================================
+# =========================================================
+# 5. SESSION STATE
+# =========================================================
 
 if "history" not in st.session_state:
     st.session_state.history = []
@@ -413,735 +384,634 @@ if "history" not in st.session_state:
 if "latest_result" not in st.session_state:
     st.session_state.latest_result = None
 
+if "page" not in st.session_state:
+    st.session_state.page = "Dashboard"
 
-# ==========================================
-# SIDEBAR
-# ==========================================
+
+# =========================================================
+# 6. FUNGSI BANTUAN
+# =========================================================
+
+def format_class_name(value):
+    value = str(value).lower()
+
+    if value in CLASS_INFO:
+        return CLASS_INFO[value]["title"]
+
+    return value.replace("_", " ").upper()
+
+
+def get_class_info(value):
+    return CLASS_INFO.get(
+        str(value).lower(),
+        {
+            "emoji": "⚙️",
+            "title": format_class_name(value),
+            "description": "Kondisi bearing teridentifikasi.",
+            "recommendation": (
+                "Lakukan pemeriksaan kondisi bearing "
+                "untuk memastikan hasil diagnosis."
+            )
+        }
+    )
+
+
+def show_hero():
+    st.markdown("""
+    <div class="hero">
+        <h1>⚙️ BearingGuard AI</h1>
+        <p>
+            Intelligent Bearing Fault Diagnosis System
+        </p>
+        <p>
+            Platform klasifikasi kondisi bearing berdasarkan
+            parameter pengukuran getaran mesin.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+def show_metric(label, value, caption=""):
+    st.markdown(f"""
+    <div class="metric-card">
+        <div class="metric-label">{label}</div>
+        <div class="metric-value">{value}</div>
+        <div class="metric-caption">{caption}</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+def get_metric(key, default):
+    value = metadata.get(key, default)
+
+    try:
+        return float(value)
+    except (ValueError, TypeError):
+        return default
+
+
+def make_input_data(values):
+    """
+    Menyusun data input sesuai urutan fitur model.
+    """
+
+    input_data = {}
+
+    for feature in FEATURE_COLUMNS:
+        if feature not in values:
+            raise ValueError(
+                f"Fitur {feature} belum tersedia di form input."
+            )
+
+        input_data[feature] = values[feature]
+
+    return pd.DataFrame(
+        [input_data],
+        columns=FEATURE_COLUMNS
+    )
+
+
+def show_prediction_result(result):
+    info = get_class_info(result["prediction"])
+
+    st.markdown("### ✨ Diagnosis Result")
+
+    st.markdown(f"""
+    <div class="result-card">
+        <div class="result-label">HASIL KLASIFIKASI BEARING</div>
+        <div style="font-size:48px; margin-top:12px;">
+            {info["emoji"]}
+        </div>
+        <div class="result-name">
+            {info["title"]}
+        </div>
+        <div class="result-description">
+            {info["description"]}
+        </div>
+        <div style="
+            background:#FFF0BF;
+            border-radius:10px;
+            padding:12px;
+            margin-top:18px;
+        ">
+            <div style="color:#65738C;font-size:12px;">
+                Tingkat Keyakinan Model
+            </div>
+            <div style="
+                color:#263B68;
+                font-size:28px;
+                font-weight:900;
+            ">
+                {result["confidence"]:.2f}%
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("### 🛠️ Maintenance Recommendation")
+
+    st.info(info["recommendation"])
+
+    st.warning(
+        "Hasil klasifikasi merupakan prediksi model AI. "
+        "Lakukan pemeriksaan teknis untuk mengonfirmasi kondisi bearing."
+    )
+
+    st.markdown("### 📊 Prediction Confidence")
+
+    probability_df = pd.DataFrame(
+        result["probabilities"]
+    )
+
+    probability_df = probability_df.sort_values(
+        by="Probability",
+        ascending=True
+    )
+
+    st.bar_chart(
+        probability_df.set_index("Condition")["Probability"],
+        horizontal=True,
+        height=350
+    )
+
+    st.markdown("### 📋 Probability Details")
+
+    display_df = probability_df.copy()
+    display_df["Probability"] = (
+        display_df["Probability"].map(
+            lambda x: f"{x:.2f}%"
+        )
+    )
+
+    st.dataframe(
+        display_df,
+        use_container_width=True,
+        hide_index=True
+    )
+
+
+# =========================================================
+# 7. SIDEBAR NAVIGATION
+# =========================================================
 
 with st.sidebar:
 
-    st.markdown(
-        """
-        <div style='text-align:center;padding:14px 4px 18px'>
-            <div style='font-size:48px'>⚙️</div>
-            <h2 style='color:white!important;margin:4px 0'>
-                BearingGuard
-            </h2>
-            <p style='color:#FFD43B!important;
-            font-size:12px;font-weight:800'>
-                SMART BEARING DIAGNOSTIC SYSTEM
-            </p>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
+    st.markdown("""
+    <div class="sidebar-logo">
+        <div style="font-size:38px;">⚙️</div>
+        <h2>BearingGuard</h2>
+        <p>SMART BEARING DIAGNOSTIC SYSTEM</p>
+    </div>
+    """, unsafe_allow_html=True)
 
-    st.markdown("---")
+    st.divider()
 
-    st.markdown("### 🏠 MAIN MENU")
+    st.markdown("### 📌 MAIN MENU")
 
     page = st.radio(
-        "Navigasi",
+        "Navigation",
         [
-            "📊 Dashboard",
-            "🔧 Diagnosis",
-            "📋 Riwayat Prediksi",
-            "📈 Informasi Model"
+            "Dashboard",
+            "Diagnosis",
+            "Riwayat Prediksi",
+            "Informasi Model"
         ],
-        label_visibility="collapsed"
+        label_visibility="collapsed",
+        key="navigation"
     )
 
-    st.markdown(
-        """
-        <div class='mascot-card'>
-            <div class='mascot'>🧒🏻 🐶</div>
-            <div style='color:#FFD43B;text-align:center;
-            font-weight:900'>
-                SHINCHAN MODE
-            </div>
-            <div class='mascot-caption'>
-                Keep your machines happy and healthy!
-            </div>
+    st.session_state.page = page
+
+    st.divider()
+
+    st.markdown("""
+    <div style="
+        background:#344D7D;
+        padding:16px;
+        border-radius:12px;
+        text-align:center;
+    ">
+        <div style="font-size:30px;">🧒🏻 🐶</div>
+        <div style="
+            color:#FFD447;
+            font-size:14px;
+            font-weight:900;
+        ">
+            SHINCHAN MODE
         </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-    st.markdown("---")
-
-    st.caption(
-        "BearingGuard AI | Machine Learning Project"
-    )
-
-
-# ==========================================
-# HEADER
-# ==========================================
-
-st.markdown(
-    """
-    <div class='hero'>
-        <div class='eyebrow'>
-            INDUSTRIAL AI • PREDICTIVE MAINTENANCE
+        <div style="font-size:11px;color:white;">
+            Keep your machine happy and healthy!
         </div>
-
-        <h1>⚙️ BearingGuard AI</h1>
-
-        <p>
-            <b>Intelligent Bearing Fault Diagnosis System</b>
-        </p>
-
-        <p>
-            Platform klasifikasi kondisi bearing
-            berdasarkan parameter pengukuran getaran mesin.
-        </p>
     </div>
-    """,
-    unsafe_allow_html=True
-)
+    """, unsafe_allow_html=True)
+
+    st.divider()
+
+    st.caption("BearingGuard AI | Machine Learning Project")
 
 
-# ==========================================
-# DISPLAY RESULT FUNCTION
-# ==========================================
+# =========================================================
+# 8. CEK MODEL
+# =========================================================
 
-def show_result(result):
+if not MODEL_READY:
 
-    prediction = result["prediction"]
+    st.error("Model belum berhasil dimuat.")
 
-    info = CLASS_INFO.get(
-        prediction,
-        {
-            "emoji": "⚙️",
-            "color": "#26365D",
-            "title": str(prediction).upper(),
-            "recommendation":
-                "Lakukan pemeriksaan teknis lebih lanjut."
-        }
+    st.write("Detail kesalahan:")
+
+    st.code(MODEL_ERROR)
+
+    st.info(
+        "Pastikan file model.joblib berada di folder models "
+        "dan file metadata.json tersedia."
     )
 
-    left, right = st.columns(
-        [1.05, .95],
-        gap="large"
-    )
-
-    # RESULT CARD
-
-    with left:
-
-        st.markdown(
-            "<div class='section-heading'>"
-            "✨ Diagnosis Result</div>",
-            unsafe_allow_html=True
-        )
-
-        st.markdown(
-            f"""
-            <div class='result-card'>
-
-                <div class='result-emoji'>
-                    {info['emoji']}
-                </div>
-
-                <div class='result-kicker'>
-                    PREDICTED BEARING CONDITION
-                </div>
-
-                <div class='result-name'
-                style='color:{info["color"]}'>
-                    {info['title']}
-                </div>
-
-                <div style='color:#526487;font-size:14px'>
-                    Posisi sensor:
-                    <b>{result['sensor']}</b>
-                </div>
-
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-
-    # MAINTENANCE RECOMMENDATION
-
-    with right:
-
-        st.markdown(
-            "<div class='section-heading'>"
-            "🛠️ Maintenance Recommendation</div>",
-            unsafe_allow_html=True
-        )
-
-        st.markdown(
-            f"""
-            <div class='recommendation'>
-                <b>{info['emoji']} Rekomendasi:</b>
-                <br>
-                {info['recommendation']}
-            </div>
-
-            <div class='warning-box'>
-                ⚠️ Hasil prediksi merupakan alat bantu
-                analisis. Konfirmasikan melalui inspeksi teknis.
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-
-    # ======================================
-    # PROBABILITY CHART
-    # ======================================
-
-    st.markdown(
-        "<div class='section-heading'>"
-        "📊 Prediction Confidence</div>",
-        unsafe_allow_html=True
-    )
-
-    probs = result.get("probabilities", [])
-
-    if isinstance(probs, dict):
-
-        probs = [
-            {
-                "Kondisi": key,
-                "Probabilitas": value
-            }
-            for key, value in probs.items()
-        ]
-
-    pdf = pd.DataFrame(probs)
-
-    if pdf.empty or not {
-        "Kondisi",
-        "Probabilitas"
-    }.issubset(pdf.columns):
-
-        st.warning(
-            "Data probabilitas tidak tersedia."
-        )
-        return
-
-    pdf["Probabilitas"] = pd.to_numeric(
-        pdf["Probabilitas"],
-        errors="coerce"
-    ).fillna(0)
-
-    pdf["Persentase"] = (
-        pdf["Probabilitas"] * 100
-    )
-
-    pdf = pdf.sort_values(
-        "Persentase",
-        ascending=False
-    )
-
-    chart_col, table_col = st.columns(
-        [1.7, 1],
-        gap="large"
-    )
-
-    with chart_col:
-
-        st.bar_chart(
-            pdf.set_index("Kondisi")[["Persentase"]],
-            horizontal=True,
-            height=360,
-            use_container_width=True
-        )
-
-    with table_col:
-
-        display = pdf[
-            ["Kondisi", "Persentase"]
-        ].copy()
-
-        display["Persentase"] = display[
-            "Persentase"
-        ].map(
-            lambda x: f"{x:.2f}%"
-        )
-
-        st.dataframe(
-            display,
-            use_container_width=True,
-            hide_index=True,
-            height=280
-        )
-
-    st.caption(
-        "Probabilitas menunjukkan tingkat keyakinan "
-        "model terhadap masing-masing kelas, "
-        "bukan jaminan kondisi fisik."
-    )
+    st.stop()
 
 
-# ==========================================
-# DASHBOARD
-# ==========================================
+# =========================================================
+# 9. DASHBOARD
+# =========================================================
 
-if page == "📊 Dashboard":
+if page == "Dashboard":
 
-    st.markdown(
-        "<div class='section-heading'>"
-        "📊 System Overview</div>",
-        unsafe_allow_html=True
-    )
+    show_hero()
 
-    m1, m2, m3 = st.columns(3)
+    st.markdown("## 📊 System Overview")
 
-    vals = [
+    col1, col2, col3 = st.columns(3)
 
-        (
-            "MODEL ALGORITHM",
+    with col1:
+        show_metric(
+            "Model Algorithm",
             metadata.get(
                 "model_name",
                 "Extra Trees Classifier"
-            )
-        ),
-
-        (
-            "VALIDATION MACRO F1",
-            f"{float(metadata.get('validation_macro_f1', 0) or 0)*100:.2f}%"
-        ),
-
-        (
-            "TEST ACCURACY",
-            f"{float(metadata.get('test_accuracy', 0) or 0)*100:.2f}%"
+            ),
+            "Machine Learning Algorithm"
         )
+
+    with col2:
+        show_metric(
+            "Validation Macro F1",
+            f"{get_metric('validation_macro_f1', 0.8047) * 100:.2f}%",
+            "Validation Performance"
+        )
+
+    with col3:
+        show_metric(
+            "Test Accuracy",
+            f"{get_metric('test_accuracy', 0.8418) * 100:.2f}%",
+            "Testing Performance"
+        )
+
+    st.divider()
+
+    st.markdown("## 🧩 Bearing Condition Classes")
+
+    class_columns = st.columns(4)
+
+    class_cards = [
+        ("🟢", "NORMAL", "Kondisi bearing normal."),
+        ("🟠", "OUTER RACE", "Kerusakan lintasan luar."),
+        ("🔴", "INNER RACE", "Kerusakan lintasan dalam."),
+        ("🟡", "BALL FAULT", "Kerusakan elemen bola.")
     ]
 
-    for col, (label, value) in zip(
-        [m1, m2, m3],
-        vals
-    ):
+    for column, card in zip(class_columns, class_cards):
 
-        with col:
+        emoji, title, description = card
 
-            st.markdown(
-                f"""
-                <div class='metric-card'>
-                    <div class='metric-label'>
-                        {label}
-                    </div>
-
-                    <div class='metric-value'>
-                        {value}
-                    </div>
+        with column:
+            st.markdown(f"""
+            <div class="metric-card" style="
+                min-height:150px;
+                text-align:center;
+            ">
+                <div style="font-size:30px;">{emoji}</div>
+                <div style="
+                    color:#263B68;
+                    font-weight:900;
+                    margin-top:8px;
+                ">
+                    {title}
                 </div>
-                """,
-                unsafe_allow_html=True
-            )
-
-    st.markdown("---")
-
-    st.markdown(
-        "<div class='section-heading'>"
-        "🧩 Bearing Condition Classes</div>",
-        unsafe_allow_html=True
-    )
-
-    class_cols = st.columns(4)
-
-    class_items = [
-
-        (
-            "💚",
-            "NORMAL",
-            "Kondisi bearing normal."
-        ),
-
-        (
-            "🔴",
-            "OUTER RACE",
-            "Kerusakan lintasan luar."
-        ),
-
-        (
-            "🟠",
-            "INNER RACE",
-            "Kerusakan lintasan dalam."
-        ),
-
-        (
-            "🟣",
-            "BALL FAULT",
-            "Kerusakan elemen bola."
-        )
-    ]
-
-    for col, item in zip(
-        class_cols,
-        class_items
-    ):
-
-        with col:
-
-            st.markdown(
-                f"""
-                <div class='class-card'>
-
-                    <div class='class-emoji'>
-                        {item[0]}
-                    </div>
-
-                    <div class='class-name'>
-                        {item[1]}
-                    </div>
-
-                    <div class='class-desc'>
-                        {item[2]}
-                    </div>
-
+                <div style="
+                    color:#7A879E;
+                    font-size:12px;
+                    margin-top:8px;
+                ">
+                    {description}
                 </div>
-                """,
-                unsafe_allow_html=True
-            )
+            </div>
+            """, unsafe_allow_html=True)
 
-    st.markdown("---")
+    st.divider()
 
-    st.markdown(
-        "<div class='section-heading'>"
-        "📝 Recent Predictions</div>",
-        unsafe_allow_html=True
-    )
+    st.markdown("## 📈 Recent Predictions")
 
     if st.session_state.history:
 
+        history_df = pd.DataFrame(
+            st.session_state.history
+        )
+
         st.dataframe(
-            pd.DataFrame(
-                st.session_state.history
-            ).tail(8),
-            use_container_width=True
+            history_df.tail(5).iloc[::-1],
+            use_container_width=True,
+            hide_index=True
         )
 
     else:
-
         st.info(
             "Belum ada riwayat prediksi. "
-            "Buka menu Diagnosis untuk memulai."
+            "Silakan lakukan diagnosis pertama."
         )
 
+    st.divider()
 
-# ==========================================
-# DIAGNOSIS
-# ==========================================
-
-elif page == "🔧 Diagnosis":
-
-    input_col, placeholder_col = st.columns(
-        [1.05, .95],
-        gap="large"
+    st.markdown(
+        "<div class='footer'>"
+        "⚙️ BearingGuard AI<br>"
+        "Machine Learning Project · Bearing Fault Diagnosis<br>"
+        "Shinchan-inspired Edition"
+        "</div>",
+        unsafe_allow_html=True
     )
 
-    with input_col:
 
-        st.markdown(
-            "<div class='section-heading'>"
-            "🔧 Input Measurement</div>",
-            unsafe_allow_html=True
+# =========================================================
+# 10. HALAMAN DIAGNOSIS
+# =========================================================
+
+elif page == "Diagnosis":
+
+    show_hero()
+
+    st.markdown("## 🔍 Bearing Diagnosis")
+
+    st.write(
+        "Masukkan parameter pengukuran untuk menganalisis "
+        "kondisi bearing menggunakan model Machine Learning."
+    )
+
+    if "posisi_sensor" not in FEATURE_COLUMNS:
+        st.error(
+            "Fitur posisi_sensor tidak ditemukan. "
+            "Periksa metadata dan fitur model."
+        )
+        st.stop()
+
+    # Form input
+
+    with st.form("bearing_diagnosis_form"):
+
+        st.markdown("### 📍 Sensor Position")
+
+        sensor_label = st.selectbox(
+            "Pilih posisi sensor",
+            list(SENSOR_MAPPING.keys()),
+            format_func=lambda x: x.replace("_", " ").title()
         )
 
-        st.write(
-            "Masukkan parameter pengukuran "
-            "untuk menganalisis kondisi bearing."
+        st.markdown("### ⚙️ Operating Parameters")
+
+        left, right = st.columns(2)
+
+        values = {}
+
+        with left:
+
+            values["kecepatan_rpm"] = st.number_input(
+                "Kecepatan (RPM)",
+                min_value=0.0,
+                value=2300.0,
+                step=50.0
+            )
+
+            values["beban_kN"] = st.number_input(
+                "Beban (kN)",
+                min_value=0.0,
+                value=2.30,
+                step=0.1
+            )
+
+            values["suhu_housing_C"] = st.number_input(
+                "Suhu Housing (°C)",
+                min_value=0.0,
+                value=50.0,
+                step=1.0
+            )
+
+            values["rms_g"] = st.number_input(
+                "RMS (g)",
+                min_value=0.0,
+                value=3.40,
+                step=0.1,
+                format="%.4f"
+            )
+
+            values["puncak_g"] = st.number_input(
+                "Puncak (g)",
+                min_value=0.0,
+                value=14.0,
+                step=0.1,
+                format="%.4f"
+            )
+
+            values["kurtosis"] = st.number_input(
+                "Kurtosis",
+                min_value=0.0,
+                value=3.2,
+                step=0.1,
+                format="%.4f"
+            )
+
+        with right:
+
+            values["crest_factor"] = st.number_input(
+                "Crest Factor",
+                min_value=0.0,
+                value=2.5,
+                step=0.1,
+                format="%.4f"
+            )
+
+            values["energi_bpfo"] = st.number_input(
+                "Energy BPFO",
+                min_value=0.0,
+                value=0.004,
+                step=0.001,
+                format="%.6f"
+            )
+
+            values["energi_bpfi"] = st.number_input(
+                "Energy BPFI",
+                min_value=0.0,
+                value=0.003,
+                step=0.001,
+                format="%.6f"
+            )
+
+            values["energi_bsf"] = st.number_input(
+                "Energy BSF",
+                min_value=0.0,
+                value=0.002,
+                step=0.001,
+                format="%.6f"
+            )
+
+            values["frekuensi_dominan_hz"] = st.number_input(
+                "Frekuensi Dominan (Hz)",
+                min_value=0.0,
+                value=150.0,
+                step=1.0,
+                format="%.4f"
+            )
+
+        submitted = st.form_submit_button(
+            "🔍 ANALYZE BEARING CONDITION",
+            use_container_width=True
         )
-
-        with st.form("bearing_diagnosis_form"):
-
-            posisi_sensor = st.selectbox(
-                "📍 Posisi Sensor",
-                ["drive_end", "fan_end"]
-            )
-
-            st.markdown(
-                "#### ⚙️ Operating Parameters"
-            )
-
-            c1, c2 = st.columns(2)
-
-            with c1:
-
-                kecepatan_rpm = st.number_input(
-                    "Kecepatan (RPM)",
-                    min_value=0.0,
-                    value=2304.0,
-                    step=1.0
-                )
-
-                beban_kN = st.number_input(
-                    "Beban (kN)",
-                    min_value=0.0,
-                    value=2.30,
-                    step=.1
-                )
-
-                suhu_housing_C = st.number_input(
-                    "Suhu Housing (°C)",
-                    value=50.8,
-                    step=.1
-                )
-
-                rms_g = st.number_input(
-                    "RMS (g)",
-                    min_value=0.0,
-                    value=.4946,
-                    step=.01,
-                    format="%.4f"
-                )
-
-                puncak_g = st.number_input(
-                    "Puncak (g)",
-                    min_value=0.0,
-                    value=1.4368,
-                    step=.01,
-                    format="%.4f"
-                )
-
-                kurtosis = st.number_input(
-                    "Kurtosis",
-                    value=2.209,
-                    step=.01
-                )
-
-            with c2:
-
-                crest_factor = st.number_input(
-                    "Crest Factor",
-                    min_value=0.0,
-                    value=2.905,
-                    step=.01
-                )
-
-                energi_bpfo = st.number_input(
-                    "Energi BPFO",
-                    min_value=0.0,
-                    value=.0042,
-                    step=.001,
-                    format="%.5f"
-                )
-
-                energi_bpfi = st.number_input(
-                    "Energi BPFI",
-                    min_value=0.0,
-                    value=.0834,
-                    step=.001,
-                    format="%.5f"
-                )
-
-                energi_bsf = st.number_input(
-                    "Energi BSF",
-                    min_value=0.0,
-                    value=.1533,
-                    step=.001,
-                    format="%.5f"
-                )
-
-                frekuensi_dominan_hz = st.number_input(
-                    "Frekuensi Dominan (Hz)",
-                    min_value=0.0,
-                    value=38.7,
-                    step=.1
-                )
-
-            submitted = st.form_submit_button(
-                "🔍 ANALYZE BEARING CONDITION",
-                use_container_width=True
-            )
-
-    # ======================================
-    # RUN PREDICTION
-    # ======================================
 
     if submitted:
 
-        values = {
-
-            "posisi_sensor":
-                SENSOR_MAPPING[posisi_sensor],
-
-            "kecepatan_rpm":
-                kecepatan_rpm,
-
-            "beban_kN":
-                beban_kN,
-
-            "suhu_housing_C":
-                suhu_housing_C,
-
-            "rms_g":
-                rms_g,
-
-            "puncak_g":
-                puncak_g,
-
-            "kurtosis":
-                kurtosis,
-
-            "crest_factor":
-                crest_factor,
-
-            "energi_bpfo":
-                energi_bpfo,
-
-            "energi_bpfi":
-                energi_bpfi,
-
-            "energi_bsf":
-                energi_bsf,
-
-            "frekuensi_dominan_hz":
-                frekuensi_dominan_hz
-        }
-
         try:
 
-            missing = [
-                f for f in FEATURE_COLUMNS
-                if f not in values
+            values["posisi_sensor"] = SENSOR_MAPPING[
+                sensor_label
             ]
 
-            if missing:
+            input_df = make_input_data(values)
 
+            prediction = model.predict(input_df)[0]
+
+            if not hasattr(model, "predict_proba"):
                 raise ValueError(
-                    f"Fitur tidak ditemukan: {missing}"
+                    "Model tidak mendukung predict_proba."
                 )
-
-            input_df = pd.DataFrame(
-                [values]
-            )[FEATURE_COLUMNS]
-
-            prediction = str(
-                model.predict(input_df)[0]
-            )
 
             probabilities = model.predict_proba(
                 input_df
             )[0]
 
-            records = [
+            classes = list(model.classes_)
 
-                {
-                    "Kondisi": str(label),
-                    "Probabilitas": float(prob)
-                }
+            probability_records = []
 
-                for label, prob in zip(
-                    model.classes_,
-                    probabilities
-                )
-            ]
+            for class_name, probability in zip(
+                classes,
+                probabilities
+            ):
+
+                probability_records.append({
+                    "Condition": format_class_name(class_name),
+                    "Probability": float(probability) * 100
+                })
+
+            confidence = max(probabilities) * 100
 
             result = {
-
-                "prediction": prediction,
-
-                "probabilities": records,
-
-                "sensor": posisi_sensor,
-
+                "prediction": str(prediction),
+                "confidence": float(confidence),
+                "probabilities": probability_records,
                 "timestamp": datetime.now().strftime(
                     "%d-%m-%Y %H:%M:%S"
                 ),
-
-                "input": values
+                "sensor": sensor_label
             }
 
             st.session_state.latest_result = result
 
-            st.session_state.history.append(
-                {
-                    "timestamp": result["timestamp"],
-                    "sensor": posisi_sensor,
-                    "prediction": prediction
-                }
-            )
+            st.session_state.history.append({
+                "Waktu": result["timestamp"],
+                "Sensor": sensor_label,
+                "Prediction": format_class_name(prediction),
+                "Confidence": f"{confidence:.2f}%"
+            })
 
-        except Exception as exc:
+            st.success("Diagnosis berhasil dilakukan!")
 
-            st.error(
-                f"Terjadi kesalahan saat prediksi: {exc}"
-            )
+        except Exception as error:
 
-    # ======================================
-    # SHOW RESULT
-    # ======================================
+            st.error("Terjadi kesalahan saat melakukan prediksi.")
 
-    if st.session_state.latest_result is None:
+            st.exception(error)
 
-        with placeholder_col:
+    # Tampilkan hasil prediksi
 
-            st.markdown(
-                "<div class='section-heading'>"
-                "✨ Diagnosis Result</div>",
-                unsafe_allow_html=True
-            )
+    if st.session_state.latest_result is not None:
 
-            st.markdown(
-                """
-                <div class='result-card'
-                style='padding:42px 18px'>
+        st.divider()
 
-                    <div class='result-emoji'>
-                        🔍
-                    </div>
-
-                    <h2>Waiting for Analysis</h2>
-
-                    <p>
-                        Masukkan data pengukuran,
-                        lalu tekan tombol analisis
-                        untuk melihat hasil diagnosis.
-                    </p>
-
-                    <div style='font-size:35px;margin-top:12px'>
-                        🧒🏻 🔧 🐶
-                    </div>
-
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-
-    else:
-
-        st.markdown("---")
-
-        show_result(
+        show_prediction_result(
             st.session_state.latest_result
         )
 
 
-# ==========================================
-# PREDICTION HISTORY
-# ==========================================
+# =========================================================
+# 11. HALAMAN RIWAYAT
+# =========================================================
 
-elif page == "📋 Riwayat Prediksi":
+elif page == "Riwayat Prediksi":
 
-    st.markdown(
-        "<div class='section-heading'>"
-        "📋 Prediction History</div>",
-        unsafe_allow_html=True
-    )
+    show_hero()
+
+    st.markdown("## 📜 Prediction History")
 
     st.write(
-        "Daftar hasil prediksi selama sesi aplikasi berjalan."
+        "Daftar hasil prediksi yang telah dilakukan "
+        "selama sesi aplikasi ini."
     )
 
     if st.session_state.history:
 
+        history_df = pd.DataFrame(
+            st.session_state.history
+        )
+
         st.dataframe(
-            pd.DataFrame(
-                st.session_state.history
-            ),
+            history_df.iloc[::-1],
             use_container_width=True,
             hide_index=True
         )
 
-        if st.button("🗑️ Hapus Riwayat Prediksi"):
+        st.markdown("### 📊 Prediction Summary")
+
+        summary = (
+            history_df["Prediction"]
+            .value_counts()
+            .reset_index()
+        )
+
+        summary.columns = [
+            "Condition",
+            "Total Prediction"
+        ]
+
+        col1, col2 = st.columns([2, 1])
+
+        with col1:
+            st.bar_chart(
+                summary.set_index("Condition"),
+                horizontal=True,
+                height=300
+            )
+
+        with col2:
+            show_metric(
+                "Total Prediction",
+                len(history_df),
+                "All predictions in this session"
+            )
+
+        if st.button(
+            "🗑️ Clear Prediction History",
+            use_container_width=True
+        ):
 
             st.session_state.history = []
-
             st.session_state.latest_result = None
 
             st.rerun()
@@ -1150,121 +1020,149 @@ elif page == "📋 Riwayat Prediksi":
 
         st.info(
             "Belum ada riwayat prediksi. "
-            "Lakukan diagnosis terlebih dahulu."
+            "Silakan lakukan diagnosis terlebih dahulu."
         )
 
 
-# ==========================================
-# MODEL INFORMATION
-# ==========================================
+# =========================================================
+# 12. HALAMAN INFORMASI MODEL
+# =========================================================
 
-elif page == "📈 Informasi Model":
+elif page == "Informasi Model":
 
-    st.markdown(
-        "<div class='section-heading'>"
-        "📈 Model Information</div>",
-        unsafe_allow_html=True
-    )
+    show_hero()
 
-    st.markdown(
-        f"""
-        <div class='panel'>
+    st.markdown("## 🧠 Model Information")
 
-            <h3>
-                🤖 {metadata.get(
-                    'model_name',
-                    'Extra Trees Classifier'
-                )}
-            </h3>
+    st.markdown("### Model Overview")
 
-            <p>
-                <b>Target:</b>
-                {metadata.get('target', 'N/A')}
-            </p>
+    col1, col2 = st.columns(2)
 
-            <p>
-                <b>Validation Macro F1:</b>
-                {float(metadata.get('validation_macro_f1', 0) or 0)*100:.2f}%
-            </p>
+    with col1:
 
-            <p>
-                <b>Test Macro F1:</b>
-                {float(metadata.get('test_macro_f1', 0) or 0)*100:.2f}%
-            </p>
+        show_metric(
+            "Algorithm",
+            metadata.get(
+                "model_name",
+                "Extra Trees Classifier"
+            ),
+            "Classification Algorithm"
+        )
 
-            <p>
-                <b>Test Accuracy:</b>
-                {float(metadata.get('test_accuracy', 0) or 0)*100:.2f}%
-            </p>
+    with col2:
 
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
+        show_metric(
+            "Target Variable",
+            metadata.get("target", "kondisi"),
+            "Prediction Target"
+        )
 
-    st.markdown("#### 🧩 Input Features")
+    st.divider()
+
+    st.markdown("### 📈 Model Performance")
+
+    performance = pd.DataFrame({
+        "Metric": [
+            "Validation Macro F1",
+            "Test Macro F1",
+            "Test Accuracy"
+        ],
+        "Score": [
+            get_metric("validation_macro_f1", 0.8047),
+            get_metric("test_macro_f1", 0.7991),
+            get_metric("test_accuracy", 0.8418)
+        ]
+    })
+
+    performance["Percentage"] = (
+        performance["Score"] * 100
+    ).map(lambda x: f"{x:.2f}%")
 
     st.dataframe(
-        pd.DataFrame(
-            {
-                "No": range(
-                    1,
-                    len(FEATURE_COLUMNS) + 1
-                ),
-                "Feature": FEATURE_COLUMNS
-            }
-        ),
+        performance[["Metric", "Percentage"]],
         use_container_width=True,
         hide_index=True
     )
 
-    st.markdown("#### 🏷️ Classification Labels")
+    st.divider()
 
-    st.write(
-        ", ".join(
-            metadata.get("classes", [])
-        )
-        if metadata.get("classes")
-        else ", ".join(
-            map(
-                str,
-                getattr(model, "classes_", [])
-            )
-        )
+    st.markdown("### 🧩 Input Features")
+
+    feature_df = pd.DataFrame({
+        "No": range(1, len(FEATURE_COLUMNS) + 1),
+        "Feature": FEATURE_COLUMNS
+    })
+
+    st.dataframe(
+        feature_df,
+        use_container_width=True,
+        hide_index=True
     )
 
-    st.caption(
-        "Model menggunakan Extra Trees Classifier "
-        "yang telah dilatih menggunakan data train "
-        "dan validation."
+    st.divider()
+
+    st.markdown("### 🏷️ Classification Labels")
+
+    model_classes = getattr(
+        model,
+        "classes_",
+        list(CLASS_INFO.keys())
     )
 
+    class_df = pd.DataFrame({
+        "Class": [
+            format_class_name(x)
+            for x in model_classes
+        ]
+    })
 
-# ==========================================
-# FOOTER
-# ==========================================
+    st.dataframe(
+        class_df,
+        use_container_width=True,
+        hide_index=True
+    )
 
-st.markdown("---")
+    st.divider()
 
-st.markdown(
-    """
-    <div style='text-align:center;padding:12px'>
+    st.markdown("### 🔧 Technical Information")
 
-        <div style='font-size:30px'>
-            ⚙️ 🧒🏻 🐶
-        </div>
+    st.write("**Model File:** `models/model.joblib`")
 
-        <b style='color:#26365D'>
-            BearingGuard AI
-        </b>
+    st.write("**Metadata File:** `models/metadata.json`")
 
-        <p style='color:#64748B;font-size:12px'>
-            Machine Learning Project •
-            Bearing Fault Diagnosis •
-            Shinchan-inspired Edition
-        </p>
+    st.write("**Model Algorithm:**",
+             metadata.get(
+                 "model_name",
+                 "Extra Trees Classifier"
+             ))
 
+    st.write("**Target:**",
+             metadata.get("target", "kondisi"))
+
+    st.write("**Number of Features:**",
+             len(FEATURE_COLUMNS))
+
+    st.write("**Sensor Mapping:**")
+
+    st.json(SENSOR_MAPPING)
+
+
+# =========================================================
+# 13. FOOTER
+# =========================================================
+
+st.markdown("""
+<div class="footer">
+    <div style="font-size:25px;">⚙️ 🧒🏻 🐶</div>
+    <div style="
+        color:#263B68;
+        font-size:16px;
+        font-weight:900;
+    ">
+        BearingGuard AI
     </div>
-    """,
-    unsafe_allow_html=True
-)
+    Machine Learning Project · Bearing Fault Diagnosis
+    <br>
+    Shinchan-inspired Edition
+</div>
+""", unsafe_allow_html=True)
