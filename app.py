@@ -84,7 +84,6 @@ FEATURE_COLUMNS = metadata.get(
 )
 
 # Sesuaikan dengan encoding posisi_sensor saat training.
-# Default ini mengikuti mapping yang digunakan sebelumnya.
 SENSOR_MAPPING = metadata.get(
     "sensor_mapping",
     {
@@ -163,7 +162,7 @@ header[data-testid="stHeader"] {
     padding-bottom: 3rem;
 }
 
-/* Sidebar */
+/* SIDEBAR */
 
 section[data-testid="stSidebar"] {
     background-color: #263B68;
@@ -191,7 +190,7 @@ section[data-testid="stSidebar"] * {
     letter-spacing: 1px;
 }
 
-/* Heading */
+/* HEADING */
 
 .main-title {
     color: #263B68;
@@ -206,7 +205,7 @@ section[data-testid="stSidebar"] * {
     margin-bottom: 25px;
 }
 
-/* Hero */
+/* HERO */
 
 .hero {
     background: linear-gradient(120deg, #263B68, #405B91);
@@ -230,7 +229,7 @@ section[data-testid="stSidebar"] * {
     margin-bottom: 0;
 }
 
-/* Cards */
+/* CARDS */
 
 div[data-testid="stVerticalBlockBorderWrapper"] {
     background-color: #FFFFFF;
@@ -267,7 +266,7 @@ div[data-testid="stVerticalBlockBorderWrapper"] {
     margin-top: 4px;
 }
 
-/* Result */
+/* RESULT */
 
 .result-card {
     background: #FFFFFF;
@@ -295,7 +294,7 @@ div[data-testid="stVerticalBlockBorderWrapper"] {
     font-size: 14px;
 }
 
-/* Recommendation */
+/* RECOMMENDATION */
 
 .recommendation {
     background: #FFF0BF;
@@ -306,30 +305,87 @@ div[data-testid="stVerticalBlockBorderWrapper"] {
     margin-top: 15px;
 }
 
-/* Buttons */
+/* =====================================================
+   BUTTON STYLE - SHINCHAN RED
+===================================================== */
 
-.stButton > button {
-    background-color: #E72D46;
-    color: #FFFFFF;
-    border: none;
-    border-radius: 10px;
-    font-weight: 800;
-    min-height: 42px;
+.stApp .stButton > button,
+.stApp [data-testid="stFormSubmitButton"] button {
+    background-color: #E72D46 !important;
+    color: #FFFFFF !important;
+    border: 2px solid #C91F38 !important;
+    border-radius: 10px !important;
+    min-height: 46px !important;
+    font-weight: 900 !important;
+    opacity: 1 !important;
 }
 
-.stButton > button:hover {
-    background-color: #C91F38;
-    color: #FFFFFF;
-    border: none;
+/* Tulisan di dalam tombol */
+.stApp .stButton > button *,
+.stApp [data-testid="stFormSubmitButton"] button * {
+    color: #FFFFFF !important;
+    font-weight: 900 !important;
+    opacity: 1 !important;
 }
 
-/* Inputs */
-
-.stTextInput input,
-.stNumberInput input,
-.stSelectbox div[data-baseweb="select"] {
-    border-radius: 8px;
+/* Hover tombol */
+.stApp .stButton > button:hover,
+.stApp [data-testid="stFormSubmitButton"] button:hover {
+    background-color: #C91F38 !important;
+    border-color: #A91930 !important;
 }
+
+/* =====================================================
+   INPUT LABEL - DARK NAVY
+===================================================== */
+
+/* Label seluruh widget */
+.stApp [data-testid="stWidgetLabel"],
+.stApp [data-testid="stWidgetLabel"] *,
+.stApp .stNumberInput label,
+.stApp .stSelectbox label {
+    color: #263B68 !important;
+    font-size: 14px !important;
+    font-weight: 900 !important;
+    opacity: 1 !important;
+}
+
+/* Label di dalam form */
+.stApp [data-testid="stForm"] label,
+.stApp [data-testid="stForm"] label * {
+    color: #263B68 !important;
+    font-weight: 900 !important;
+    opacity: 1 !important;
+}
+
+/* INPUT FIELD */
+
+.stApp .stNumberInput input,
+.stApp .stTextInput input {
+    color: #263B68 !important;
+    background-color: #FFFFFF !important;
+    font-weight: 700 !important;
+    border: 1px solid #C8D0DF !important;
+}
+
+/* DROPDOWN SENSOR */
+
+.stApp .stSelectbox div[data-baseweb="select"] {
+    border-radius: 8px !important;
+    background-color: #FFFFFF !important;
+    color: #263B68 !important;
+    font-weight: 700 !important;
+}
+
+/* Fokus input */
+
+.stApp .stNumberInput input:focus,
+.stApp .stTextInput input:focus {
+    border: 2px solid #E72D46 !important;
+    box-shadow: 0 0 0 2px rgba(231, 45, 70, 0.12) !important;
+}
+
+/* GENERAL HEADING */
 
 h1, h2, h3 {
     color: #263B68;
@@ -339,6 +395,8 @@ h1, h2, h3 {
 hr {
     border-color: #E9DCC7;
 }
+
+/* FOOTER */
 
 .footer {
     text-align: center;
@@ -351,6 +409,8 @@ hr {
     color: #7A879E;
     font-size: 12px;
 }
+
+/* RESPONSIVE */
 
 @media (max-width: 768px) {
     .main-title {
@@ -514,7 +574,7 @@ def show_prediction_result(result):
 
     st.warning(
         "Hasil klasifikasi merupakan prediksi model AI. "
-        "Lakukan pemeriksaan teknis untuk mengonfirmasi kondisi bearing."
+        "Lakukan pemeriksaan teknis untuk mengonfirmasi hasil diagnosis."
     )
 
     st.markdown("### 📊 Prediction Confidence")
@@ -537,6 +597,7 @@ def show_prediction_result(result):
     st.markdown("### 📋 Probability Details")
 
     display_df = probability_df.copy()
+
     display_df["Probability"] = (
         display_df["Probability"].map(
             lambda x: f"{x:.2f}%"
@@ -763,7 +824,7 @@ elif page == "Diagnosis":
         )
         st.stop()
 
-    # Form input
+    # FORM INPUT
 
     with st.form("bearing_diagnosis_form"):
 
@@ -875,6 +936,8 @@ elif page == "Diagnosis":
             use_container_width=True
         )
 
+    # PROSES PREDIKSI
+
     if submitted:
 
         try:
@@ -939,7 +1002,7 @@ elif page == "Diagnosis":
 
             st.exception(error)
 
-    # Tampilkan hasil prediksi
+    # TAMPILKAN HASIL PREDIKSI
 
     if st.session_state.latest_result is not None:
 
@@ -1130,17 +1193,23 @@ elif page == "Informasi Model":
 
     st.write("**Metadata File:** `models/metadata.json`")
 
-    st.write("**Model Algorithm:**",
-             metadata.get(
-                 "model_name",
-                 "Extra Trees Classifier"
-             ))
+    st.write(
+        "**Model Algorithm:**",
+        metadata.get(
+            "model_name",
+            "Extra Trees Classifier"
+        )
+    )
 
-    st.write("**Target:**",
-             metadata.get("target", "kondisi"))
+    st.write(
+        "**Target:**",
+        metadata.get("target", "kondisi")
+    )
 
-    st.write("**Number of Features:**",
-             len(FEATURE_COLUMNS))
+    st.write(
+        "**Number of Features:**",
+        len(FEATURE_COLUMNS)
+    )
 
     st.write("**Sensor Mapping:**")
 
