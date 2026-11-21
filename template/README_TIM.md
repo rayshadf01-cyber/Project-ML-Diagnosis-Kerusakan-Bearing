@@ -2,7 +2,7 @@
 
 > Salin berkas ini menjadi `README.md` di repositori tim kalian, lalu isi semua bagian di dalam kurung siku.
 
-**Kasus:** [4 diagnosis bearing] · **Aplikasi:** [(https://project-ml-diagnosis-kerusakan-bearing-happy-jia.streamlit.app/#bearing-guard-ai)] · **Video:** [tautan video]
+**Kasus:** [4 diagnosis bearing] · **Aplikasi:** [(https://project-ml-diagnosis-kerusakan-bearing-happy-jia.streamlit.app/#bearing-guard-ai)] · **Video:** [https://drive.google.com/drive/folders/13ksQKZJDUA0laa4k4MJIwjbT4YqpVGjz]
 
 | Anggota | NIM | Bagian yang dikerjakan |
 |---|---|---|
