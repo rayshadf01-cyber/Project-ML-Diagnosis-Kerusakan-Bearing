@@ -6,7 +6,7 @@
 
 | Anggota | NIM | Bagian yang dikerjakan |
 |---|---|---|
-| [Nurjiha] | [2400515] | [EDA, preprocessing awal, penyusunan laporan, dan editing video] |
+| [Nurjiha] | [2400515] | [Input data, EDA, preprocessing awal, penyusunan laporan, dan editing video] |
 | [Raysha Happy] | [2404021] | [Penyelesaian notebook Colab, pengembangan model ML, evaluasi, tuning, penyimpanan model, aplikasi Streamlit, integrasi, dan GitHub] |
 
 ## Masalah dan pengguna
