@@ -1,55 +1,82 @@
-# [Nama proyek] · Tim [nama tim]
+# [BearingGuard AI] · Tim [duoSumatera]
 
 > Salin berkas ini menjadi `README.md` di repositori tim kalian, lalu isi semua bagian di dalam kurung siku.
 
-**Kasus:** [nomor dan nama kasus] · **Aplikasi:** [tautan aplikasi] · **Video:** [tautan video]
+**Kasus:** [4 diagnosis bearing] · **Aplikasi:** [(https://project-ml-diagnosis-kerusakan-bearing-happy-jia.streamlit.app/#bearing-guard-ai)] · **Video:** [tautan video]
 
 | Anggota | NIM | Bagian yang dikerjakan |
 |---|---|---|
-| [nama] | [NIM] | [misalnya EDA dan pembersihan data] |
-| [nama] | [NIM] | [misalnya model dan evaluasi] |
-| [nama] | [NIM] | [misalnya API dan aplikasi] |
+| [Nurjiha] | [2400515] | [EDA, preprocessing awal, penyusunan laporan, dan editing video] |
+| [Raysha Happy] | [2404021] | [Penyelesaian notebook Colab, pengembangan model ML, evaluasi, tuning, penyimpanan model, aplikasi Streamlit, integrasi, dan GitHub] |
 
 ## Masalah dan pengguna
 
-[Dua atau tiga kalimat: siapa penggunanya dan keputusan apa yang dibantu oleh model ini.]
+[BearingGuard AI dikembangkan untuk membantu teknisi pemeliharaan di pabrik semen dalam mengidentifikasi kondisi bearing berdasarkan data pengukuran getaran mesin. Sistem ini membantu mempercepat proses diagnosis dengan mengklasifikasikan kondisi bearing menjadi normal, outer_race, inner_race, dan bola, serta menampilkan probabilitas prediksi dan rekomendasi suku cadang yang perlu disiapkan sebagai bahan pertimbangan tindakan pemeliharaan.]
 
 ## Data dan pembersihan
 
 | Masalah yang ditemukan | Jumlah baris | Cara menangani |
 |---|---|---|
-| [misalnya baris duplikat] | [angka] | [misalnya dihapus dengan drop_duplicates] |
+| [Missing value pada suhu housing C] | [153] | [Baris dengan nilai kosong dihapus] |
+| [Missing value pada kurtosis] | [456] | [Baris dengan nilai kosong dihapus] |
+| [Label kondisi tidak konsisten] | [16] | [Dipetakan menjadi 4 kelas standar] |
+| [Kolom id rekaman tidak relevan] | [1] | [Dihapus dari kolom model] |
+| [Posisi sensor berbentuk kategorikal] | [2] | [Encoding: drive_end = 0, fan_end = 1] |
+
 
 ## Hasil
 
-| Model | [metrik utama] *validation* | [metrik utama] *test* |
+| Model | [Validation Macro F1] | [Test Macro F] |
 |---|---|---|
-| *Baseline*: [nama *baseline*] | | |
-| [model final] | | |
+| *Baseline*: [Logistic Regression] | [0.6120] | [0.6045] |
+| [Tuned Extra Trees Classifier] | [0.8029] | [0.7992] |
 
-*Threshold* yang dipakai: [angka], karena [alasan bisnis].
+*Threshold* yang dipakai: Tidak menggunakan threshold khusus (default). Model menentukan kelas hasil prediksi berdasarkan probabilitas tertinggi (argmax). Pendekatan ini digunakan karena sistem melakukan klasifikasi multikelas terhadap empat kondisi bearing, yaitu normal, outer_race, inner_race, dan bola.
 
 ## Cara menjalankan
 
 ```bash
+1. Clone Repository
+git clone https://github.com/rayshadf01-cyber/Project-ML-Diagnosis-Kerusakan-Bearing.git
+
+2. Masuk ke Folder Proyek
+cd Project-ML-Diagnosis-Kerusakan-Bearing
+
+3. Install Dependencies
 pip install -r requirements.txt
-uvicorn app.api.main:app --reload       # API
-streamlit run app/ui/streamlit_app.py   # aplikasi
+
+4. Jalankan Aplikasi
+streamlit run app.py
+
+Setelah aplikasi berhasil dijalankan, buka alamat lokal yang ditampilkan di terminal melalui browser untuk menggunakan BearingGuard AI.
 ```
 
 ## Struktur repositori
 
 ```
-notebooks/      notebook dari EDA sampai penyimpanan model
-data/           data mentah (dan data bersih jika perlu)
-src/features.py fungsi pembuat fitur, dipakai saat pelatihan dan saat prediksi
-artifacts/      model.joblib + metadata.json
-app/            API (FastAPI) dan antarmuka (Streamlit)
+bearing-project/
+app.py                  # Aplikasi web Streamlit
+requirements.txt        # Daftar library yang digunakan
+README.md               # Dokumentasi proyek
+models/
+├── model.joblib        # Model Tuned Extra Trees
+└── metadata.json       # Metadata model dan fitur
+src/
+└── features.py         # Fungsi preprocessing dan
+                        # transformasi fitur
 ```
 
 ## Keterbatasan
 
-[Dalam kondisi apa model ini tidak dapat dipercaya? Data apa yang belum tersedia?]
+[1. Ketergantungan pada kualitas sensor: Hasil prediksi model bergantung pada akurasi dan kalibrasi sensor getaran serta sensor suhu. Data sensor yang tidak akurat dapat memengaruhi hasil diagnosis.
+
+2. Penggunaan fitur hasil ekstraksi: Model menggunakan fitur statistik dan frekuensi dari rekaman getaran berdurasi satu detik, bukan sinyal getaran mentah (raw time-series waveform). Oleh karena itu, kerusakan bearing pada tahap awal yang belum menunjukkan perubahan getaran secara signifikan mungkin sulit terdeteksi.
+
+3. Kesalahan klasifikasi: Model masih berpotensi mengalami kesalahan dalam membedakan jenis kerusakan outer_race, inner_race, dan bola karena adanya kemiripan karakteristik energi frekuensi getaran.
+
+4. Keterbatasan cakupan dataset: Model dikembangkan berdasarkan dataset yang tersedia. Kemampuannya dalam mengenali kerusakan pada berbagai jenis mesin, kondisi operasional, dan lingkungan pabrik yang berbeda masih perlu diuji lebih lanjut.
+
+5. Perlu validasi teknis: Hasil prediksi merupakan alat bantu pengambilan keputusan (decision-support tool), bukan pengganti pemeriksaan fisik. Keputusan pemeliharaan dan penggantian komponen tetap perlu dikonfirmasi melalui inspeksi teknis oleh tenaga ahli.]
 
 ## Daftar periksa sebelum dikumpulkan
 
